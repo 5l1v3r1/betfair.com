@@ -14,5 +14,5 @@ How to run?
 ```
 $ cd betfair.com
 $ workon betfair.com
-$ python manage.py
+$ python manage.py --matches
 ```
