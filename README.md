@@ -15,4 +15,5 @@ How to run?
 $ cd betfair.com
 $ workon betfair.com
 $ python manage.py --matches
+$ python manage.py --web-sockets {{event_id}}
 ```
