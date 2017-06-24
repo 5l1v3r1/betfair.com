@@ -58,11 +58,11 @@ class WebSocketsClient(object):
         )
 
     def connect(self):
-        print('connect()')
+        # print('connect()')
         reactor.callFromThread(connectWS, self._factory)
 
     def disconnect(self):
-        print('disconnect()')
+        # print('disconnect()')
         self._factory.doStop()
 
 
@@ -78,18 +78,19 @@ class WebSocketsFactory(WebSocketClientFactory, ReconnectingClientFactory):
 class WebSocketsProtocol(WebSocketClientProtocol):
 
     def onOpen(self):
-        print('onOpen()')
+        # print('onOpen()')
+        pass
 
     def onClose(self, was_clean, code, reason):
-        print('onClose()')
-        print('was clean:', repr(was_clean))
-        print('code:', repr(code))
-        print('reason:', repr(reason))
+        # print('onClose()')
+        # print('was clean:', repr(was_clean))
+        # print('code:', repr(code))
+        # print('reason:', repr(reason))
+        pass
 
     def onMessage(self, payload, isBinary):
-        print('onMessage()')
+        # print('onMessage()')
         prefix, message = self.parse(payload)
-        print(prefix)
         if prefix == '0':
             return
         if prefix == '3':
@@ -101,8 +102,8 @@ class WebSocketsProtocol(WebSocketClientProtocol):
                     'Topic': self.factory.topic,
                     'ConditionsUpdates':'true',
                     'LiveUpdates':'true',
-                    'OddsUpdates':'true',
-                    'VideoUpdates':'true',
+                    'OddsUpdates':'false',
+                    'VideoUpdates':'false',
                 },
             ]
             message = dumps(message)
@@ -110,13 +111,16 @@ class WebSocketsProtocol(WebSocketClientProtocol):
             self.sendMessage(message)
             return
         if prefix == '42':
-            print(message[1].keys())
+            message = loads(message)
+            if 'ActiveMQMessage' in message[1]:
+                message[1]['ActiveMQMessage'] = loads(message[1]['ActiveMQMessage'])
+                pprint(message[1]['ActiveMQMessage'])
             message = '2'
             self.sendMessage(message)
             return
 
     def sendMessage(self, payload, *args, **kwargs):
-        print(payload)
+        # print(payload)
         super(WebSocketsProtocol, self).sendMessage(payload, *args, **kwargs)
 
     def parse(self, payload):
@@ -131,8 +135,6 @@ class WebSocketsProtocol(WebSocketClientProtocol):
             prefix.append(character)
             message = message[1:]
         prefix = ''.join(prefix)
-        if message:
-            message = loads(message)
         return prefix, message
 
 
