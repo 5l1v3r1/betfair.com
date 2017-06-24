@@ -114,7 +114,11 @@ class WebSocketsProtocol(WebSocketClientProtocol):
             message = loads(message)
             if 'ActiveMQMessage' in message[1]:
                 message[1]['ActiveMQMessage'] = loads(message[1]['ActiveMQMessage'])
-                pprint(message[1]['ActiveMQMessage'])
+                mlu = message[1]['ActiveMQMessage']['MLU']
+                t = mlu.get('T', [])
+                eid = mlu.get('EID', '?')
+                en = mlu.get('EN', '?')
+                print(mlu['CPT'], mlu['CR'], mlu['PSID'], mlu['TSID'], mlu['SCH'], mlu['SCA'], len(t), eid, en)
             message = '2'
             self.sendMessage(message)
             return
