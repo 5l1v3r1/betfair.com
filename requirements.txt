@@ -1,15 +1,5 @@
-attrs==17.2.0
 autobahn==17.6.1
-Automat==0.6.0
-certifi==2017.4.17
-chardet==3.0.4
-constantly==15.1.0
-hyperlink==17.2.0
-idna==2.5
-incremental==17.5.0
+pyOpenSSL==17.0.0
 requests==2.18.1
-six==1.10.0
+service-identity==16.0.0
 Twisted==17.5.0
-txaio==2.8.0
-urllib3==1.21.1
-zope.interface==4.4.2
