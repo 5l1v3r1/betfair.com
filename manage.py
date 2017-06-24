@@ -1,20 +1,15 @@
 from datetime import datetime
 from json import dumps, loads
+from logging import basicConfig, INFO, getLogger
 from pprint import pprint
 from re import compile
+from ssl import CERT_NONE
 from sys import argv
 from urllib import urlencode
 from urlparse import parse_qs, urlparse
 
-from autobahn.twisted.websocket import connectWS, WebSocketClientFactory, WebSocketClientProtocol
-from autobahn.websocket.compress import (
-    PerMessageDeflateOffer,
-    PerMessageDeflateResponse,
-    PerMessageDeflateResponseAccept,
-)
 from requests import Session
-from twisted.internet import reactor
-from twisted.internet.protocol import ReconnectingClientFactory
+from websocket import WebSocketApp
 
 DATES_PATTERN = compile(r'platformConfig = (\{.*?\});')
 MATCHES_PATTERN = compile(
@@ -26,70 +21,52 @@ HOSTNAME_PATTERN = compile(r'window.socketServerURL = "https://(.*?)";')
 TOKEN_PATTERN = compile(r'window.validationToken = "(.*?)";')
 TOPIC_PATTERN = compile(r'window.matchId = "(.*?)";')
 
+basicConfig()
 
-class WebSocketsClient(object):
+logger = getLogger('websocket')
+logger.setLevel(INFO)
+
+
+class WebSockets(object):
 
     def __init__(self, url, topic):
-        self._url = url
-        self._topic = topic
-        self._factory = self._build_factory()
-        self._connection = None
-
-    def _build_factory(self):
-        factory = WebSocketsFactory(self._url)
-        factory.protocol = WebSocketsProtocol
-        factory.topic = self._topic
-
-        factory.setProtocolOptions(perMessageCompressionAccept=self._accept)
-        factory.setProtocolOptions(perMessageCompressionOffers=[self._build_offer()])
-
-        return factory
-
-    def _accept(self, response):
-        if isinstance(response, PerMessageDeflateResponse):
-            return PerMessageDeflateResponseAccept(response)
-
-    def _build_offer(self):
-        return PerMessageDeflateOffer(
-            accept_max_window_bits=True,
-            accept_no_context_takeover=False,
-            request_max_window_bits=0,
-            request_no_context_takeover=False,
-        )
+        self.url = url
+        self.topic = topic
+        self.connection = None
 
     def connect(self):
-        # print('connect()')
-        reactor.callFromThread(connectWS, self._factory)
+        logger.debug('connect()')
+        self.connection = WebSocketApp(
+            self.url,
+            on_open=self.on_open,
+            on_close=self.on_close,
+            on_message=self.on_message,
+            on_error=self.on_error,
+        )
+        sslopt = {
+            'cert_reqs': CERT_NONE,
+        }
+        self.connection.run_forever(sslopt=sslopt)
 
     def disconnect(self):
-        # print('disconnect()')
-        self._factory.doStop()
+        logger.debug('disconnect()')
+        if self.connection:
+            self.connection.close()
 
+    def send(self, payload, *args, **kwargs):
+        logger.debug(payload)
+        self.connection.send(payload)
 
-class WebSocketsFactory(WebSocketClientFactory, ReconnectingClientFactory):
-
-    def clientConnectionFailed(self, connector, reason):
-        self.retry(connector)
-
-    def clientConnectionLost(self, connector, reason):
-        self.retry(connector)
-
-
-class WebSocketsProtocol(WebSocketClientProtocol):
-
-    def onOpen(self):
-        # print('onOpen()')
+    def on_open(self, _):
+        logger.debug('on_open()')
         pass
 
-    def onClose(self, was_clean, code, reason):
-        # print('onClose()')
-        # print('was clean:', repr(was_clean))
-        # print('code:', repr(code))
-        # print('reason:', repr(reason))
+    def on_close(self, _):
+        logger.debug('on_close()')
         pass
 
-    def onMessage(self, payload, isBinary):
-        # print('onMessage()')
+    def on_message(self, _, payload):
+        logger.debug('on_message()')
         prefix, message = self.parse(payload)
         if prefix == '0':
             return
@@ -99,16 +76,16 @@ class WebSocketsProtocol(WebSocketClientProtocol):
             message = [
                 'subscribe',
                 {
-                    'Topic': self.factory.topic,
-                    'ConditionsUpdates':'true',
-                    'LiveUpdates':'true',
-                    'OddsUpdates':'false',
-                    'VideoUpdates':'false',
+                    'Topic': self.topic,
+                    'ConditionsUpdates': 'true',
+                    'LiveUpdates': 'true',
+                    'OddsUpdates': 'false',
+                    'VideoUpdates': 'false',
                 },
             ]
             message = dumps(message)
             message = '{prefix:d}{message:s}'.format(prefix=42, message=message)
-            self.sendMessage(message)
+            self.send(message)
             return
         if prefix == '42':
             message = loads(message)
@@ -118,14 +95,10 @@ class WebSocketsProtocol(WebSocketClientProtocol):
                 t = mlu.get('T', [])
                 eid = mlu.get('EID', '?')
                 en = mlu.get('EN', '?')
-                print(mlu['CPT'], mlu['CR'], mlu['PSID'], mlu['TSID'], mlu['SCH'], mlu['SCA'], len(t), eid, en)
+                logger.info((mlu['CPT'], mlu['CR'], mlu['PSID'], mlu['TSID'], mlu['SCH'], mlu['SCA'], len(t), eid, en))
             message = '2'
-            self.sendMessage(message)
+            self.send(message)
             return
-
-    def sendMessage(self, payload, *args, **kwargs):
-        # print(payload)
-        super(WebSocketsProtocol, self).sendMessage(payload, *args, **kwargs)
 
     def parse(self, payload):
         prefix = []
@@ -140,6 +113,11 @@ class WebSocketsProtocol(WebSocketClientProtocol):
             message = message[1:]
         prefix = ''.join(prefix)
         return prefix, message
+
+    def on_error(self, _, error):
+        logger.debug('on_error()')
+        logger.debug(error)
+        pass
 
 
 def main(options):
@@ -209,9 +187,8 @@ def execute_web_sockets(event_id):
     url = get_web_sockets_url_1(session, event_id)
     url = get_web_sockets_url_2(session, url)
     url, topic = get_web_sockets_url_and_topic(session, url)
-    web_sockets_client = WebSocketsClient(url, topic)
-    web_sockets_client.connect()
-    reactor.run()
+    web_sockets = WebSockets(url, topic)
+    web_sockets.connect()
 
 
 def get_web_sockets_url_1(session, event_id):
